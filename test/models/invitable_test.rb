@@ -48,7 +48,7 @@ class InvitableTest < ActiveSupport::TestCase
 
   test 'should test invitation sent at with invite_for configuration value' do
     user = User.invite!(:email => "valid@email.com")
-    
+
     User.stubs(:invite_for).returns(nil)
     user.invitation_sent_at = Time.now.utc
     assert user.valid_invitation?
@@ -118,6 +118,15 @@ class InvitableTest < ActiveSupport::TestCase
     assert_difference('ActionMailer::Base.deliveries.size') do
       token = user.invitation_token
       user.invite!
+      assert_not_equal token, user.invitation_token
+    end
+  end
+
+  test 'invite_without_email should not send invitation email' do
+    user = new_user
+    assert_no_difference('ActionMailer::Base.deliveries.size') do
+      token = user.invitation_token
+      user.invite_without_email!
       assert_not_equal token, user.invitation_token
     end
   end

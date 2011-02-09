@@ -38,11 +38,15 @@ module Devise
       # Reset invitation token and send invitation again
       def invite!
         if new_record? || invited?
-          self.skip_confirmation! if self.new_record? && self.respond_to?(:skip_confirmation!)
-          generate_invitation_token if self.invitation_token.nil?
-          self.invitation_sent_at = Time.now.utc
-          save(:validate => false)
+          configure_and_save!
           ::Devise.mailer.invitation_instructions(self).deliver
+        end
+      end
+
+      # Reset invitation token, do not send invitation email
+      def invite_without_email!
+        if new_record? || invited?
+          configure_and_save!
         end
       end
 
@@ -54,6 +58,12 @@ module Devise
       end
 
       protected
+        def configure_and_save!
+          self.skip_confirmation! if self.new_record? && self.respond_to?(:skip_confirmation!)
+          generate_invitation_token if self.invitation_token.nil?
+          self.invitation_sent_at = Time.now.utc
+          save(:validate => false)
+        end
 
         # Checks if the invitation for the user is within the limit time.
         # We do this by calculating if the difference between today and the
@@ -86,10 +96,26 @@ module Devise
 
       module ClassMethods
         # Attempt to find a user by it's email. If a record is not found, create a new
-        # user and send invitation to it. If user is found, returns the user with an
+        # user, but do not send invitation to it. If user is found, returns the user with an
         # email already exists error.
         # Attributes must contain the user email, other attributes will be set in the record
         def invite_without_email!(attributes={})
+          invitable = create_invitable(attributes)
+          invitable.invite_without_email! if invitable.errors.empty?
+          invitable
+        end
+
+        # Attempt to find a user by it's email. If a record is not found, create a new
+        # user and send invitation to it. If user is found, returns the user with an
+        # email already exists error.
+        # Attributes must contain the user email, other attributes will be set in the record
+        def invite!(attributes={})
+          invitable = create_invitable(attributes)
+          invitable.invite! if invitable.errors.empty?
+          invitable
+        end
+
+        def create_invitable(attributes={})
           invitable = find_or_initialize_with_error_by(:email, attributes.delete(:email))
           invitable.attributes = attributes
 
@@ -99,13 +125,6 @@ module Devise
             invitable.errors.add(:email, :taken) unless invitable.invited?
           end
 
-          invitable
-        end
-
-        def invite!(attributes={})
-          invitable = invite_without_email!(attributes)
-
-          invitable.invite! if invitable.errors.empty?
           invitable
         end
 
